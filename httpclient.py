@@ -18,6 +18,14 @@
 # Write your own HTTP GET and POST
 # The point is to understand what you have to send and get experience with it
 
+# Acknowledgements:
+# https://docs.python.org/3/library/urllib.parse.html
+# https://uofa-cmput404.github.io/cmput404-slides/04-HTTP.html#/
+# https://www.w3.org/Protocols/rfc2616/rfc2616-sec4.html
+# https://www.rfc-editor.org/rfc/rfc9110.html#name-header-fields
+# https://docs.python.org/3/library/urllib.parse.html
+# https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/POST
+# https://docs.python.org/3/library/urllib.parse.html
 import sys
 import socket
 import re
@@ -36,18 +44,39 @@ class HTTPClient(object):
     #def get_host_port(self,url):
 
     def connect(self, host, port):
+        if(port==None):
+            port=80
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.connect((host, port))
         return None
 
     def get_code(self, data):
-        return None
+        lines = data.split("\n")
+        first = lines[0].split(" ")
+        return  int(first[1])
 
     def get_headers(self,data):
-        return None
+        lines = data.split("\n")
+
+        # find amount of headers
+        lines = data.split("\n")
+        i = 1
+        for line in lines[1:]:
+            if(line==''):
+                break
+            i=i+1
+            
+        return "\n".join(lines[1:i])
 
     def get_body(self, data):
-        return None
+        lines = data.split("\r\n")
+        i = 1
+        for line in lines[1:]:
+            if(line==''):
+                break
+            i=i+1
+            
+        return "\n".join(lines[i+1:])
     
     def sendall(self, data):
         self.socket.sendall(data.encode('utf-8'))
@@ -68,14 +97,59 @@ class HTTPClient(object):
         return buffer.decode('utf-8')
 
     def GET(self, url, args=None):
-        code = 500
-        body = ""
-        return HTTPResponse(code, body)
+        parsed = urllib.parse.urlparse(url)
+        #new_url = parsed.scheme+'://'+parsed.hostname+parsed.path+parsed.query+parsed.fragment
+        #print("Connecting to %s port %s\n" % (new_url,parsed.port))
+        self.connect(parsed.hostname, parsed.port)
+
+        # from lab2 client.py
+        parsedpath=parsed.path
+        if parsedpath=='':
+            parsedpath='/'
+        payload = f'GET {parsedpath} HTTP/1.1\r\nHost: {parsed.hostname}\r\nConnection:close\r\n\r\n'
+        self.sendall(payload)
+        data = self.recvall(self.socket)
+        self.close()
+
+        returner_code = self.get_code(data)
+        returner_body = self.get_body(data)
+        #print("code = %s" % (returner_code))
+        return HTTPResponse(returner_code, returner_body)
 
     def POST(self, url, args=None):
-        code = 500
-        body = ""
-        return HTTPResponse(code, body)
+        # 
+        parsed = urllib.parse.urlparse(url)
+        #new_url = parsed.scheme+'://'+parsed.hostname+parsed.path+parsed.query+parsed.fragment
+        #print("Connecting to %s port %s\n" % (new_url,parsed.port))
+        self.connect(parsed.hostname, parsed.port)
+
+        # from lab2 client.py
+        parsedpath=parsed.path
+        if parsedpath=='':
+            parsedpath='/'
+        payload = f'POST {parsedpath} HTTP/1.1\r\nHost: {parsed.hostname}\r\n'
+        payload+="Content-Type: application/x-www-form-urlencoded\r\n" 
+        content_length_size = 0
+        content_length = ""
+        if args:
+            for arg in args:
+                content_length+= f"{arg}={args[arg]}&"
+            content_length=content_length[:-1]
+            content_length_size=len(content_length.encode('utf-8'))
+            payload +="Content-Length: " + str(content_length_size) + "\r\n\r\n"
+            payload +=content_length
+        else:
+            payload+="Content-Length: 0\r\n"
+        payload+="\r\n\r\n"
+        #print(payload)
+        self.sendall(payload)
+        data = self.recvall(self.socket)
+        self.close()
+
+        returner_code = self.get_code(data)
+        returner_body = self.get_body(data)
+        #print("code = %s" % (returner_code))
+        return HTTPResponse(returner_code, returner_body)
 
     def command(self, url, command="GET", args=None):
         if (command == "POST"):
